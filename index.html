@@ -201,8 +201,14 @@
   function openBtn(t){
     return '<a class="btn btn-open" href="'+esc(t.url)+'" target="_blank" rel="noopener">🔗 Open</a>';
   }
+  function openPremium(e){
+    if (e) e.preventDefault();
+    var url = BOT + "?start=premium";
+    if (tg && tg.openTelegramLink) { try { tg.openTelegramLink(url); return; } catch(err){} }
+    try { window.open(url, "_blank"); } catch(err2){ location.href = url; }
+  }
   function lockBtn(){
-    return '<a class="btn btn-lock" href="'+BOT+'?start=premium">💎 Get Premium</a>';
+    return '<a class="btn btn-lock" href="#" onclick="openPremium(event);return false;">💎 Get Premium</a>';
   }
 
   function toolCard(t){
