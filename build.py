@@ -113,16 +113,24 @@ def main() -> None:
         emoji, label = split_emoji(c.get("label", ""))
         cats.append({"id": c.get("id", ""), "emoji": emoji, "label": label})
 
-    out_trials = [
-        {
-            "name": t.get("name", ""),
-            "url": t.get("url", ""),
-            "country": t.get("country", ""),
-            "trial": t.get("trial", ""),
-            "one_liner": t.get("one_liner", ""),
-        }
-        for t in trials
-    ]
+    out_trials = []
+    for i, t in enumerate(trials):
+        if i < FREE_SAMPLES_PER_CAT:
+            out_trials.append(
+                {
+                    "locked": False,
+                    "name": t.get("name", ""),
+                    "url": t.get("url", ""),
+                    "country": t.get("country", ""),
+                    "trial": t.get("trial", ""),
+                    "one_liner": t.get("one_liner", ""),
+                }
+            )
+        else:
+            key = "r" + str(i)
+            raw = (t.get("name", "") + "\n" + t.get("url", "")).encode("utf-8")
+            priv[key] = base64.b64encode(raw).decode("ascii")
+            out_trials.append({"locked": True, "key": key})
 
     meta = {
         "generated": date.today().isoformat(),
@@ -321,6 +329,14 @@ TEMPLATE = """<!DOCTYPE html>
         t.locked = false;
       }
     });
+    TRIALS.forEach(function(t){
+      if (t.locked && t.key && PRIV[t.key]) {
+        var p2 = b64d(PRIV[t.key]).split("\n");
+        t.name = p2[0] || "";
+        t.url = p2[1] || "";
+        t.locked = false;
+      }
+    });
   }
 
   var state = { cat:"all", q:"" };
@@ -358,7 +374,7 @@ TEMPLATE = """<!DOCTYPE html>
     return '<a class="btn btn-open" href="'+esc(t.url)+'" target="_blank" rel="noopener">🔗 Open</a>';
   }
   function lockBtn(){
-    return '<a class="btn btn-lock" href="'+BOT+'">🔒 Unlock in Bot</a>';
+    return '<a class="btn btn-lock" href="'+BOT+'">💎 Get Premium</a>';
   }
 
   function toolCard(t){
@@ -368,8 +384,6 @@ TEMPLATE = """<!DOCTYPE html>
         '<div class="lock-big">🔒</div>'+
         '<div class="cname">Premium Tool</div>'+
         '<div class="cicon" style="font-size:13px">'+esc(catEmoji(t.category))+'</div>'+
-        '<div class="cline">'+esc(t.one_liner)+'</div>'+
-        '<div class="cplan">🆓 '+esc(t.free_plan)+'</div>'+
         lockBtn()+'</div>';
     }
     return '<div class="card open">'+badge+
@@ -397,6 +411,13 @@ TEMPLATE = """<!DOCTYPE html>
   function renderTrials(){
     document.getElementById("trialCount").textContent = TRIALS.length;
     document.getElementById("tgrid").innerHTML = TRIALS.map(function(t){
+      if (t.locked) {
+        return '<div class="card locked trial">'+
+          '<div class="lock-big">🔒</div>'+
+          '<div class="cname">Premium Offer</div>'+
+          '<div class="cicon" style="font-size:13px">🎁</div>'+
+          lockBtn()+'</div>';
+      }
       return '<div class="card open trial">'+
         '<div class="cicon">🎁</div>'+
         '<div class="cname">'+esc(t.name)+'</div>'+
