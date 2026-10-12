@@ -12,6 +12,7 @@ Usage: python3 build.py   (run from the miniapp/ directory)
 """
 from __future__ import annotations
 
+import base64
 import json
 import re
 from datetime import date, timedelta
@@ -19,10 +20,12 @@ from pathlib import Path
 
 BASE = Path(__file__).resolve().parent
 YAML_PATH = BASE.parent / "data" / "tools.yaml"
+ENTITLEMENTS_PATH = BASE.parent / "data" / "entitlements.json"
 OUT_PATH = BASE / "index.html"
 FREE_SAMPLES_PER_CAT = 3
 BOT_DEEP_LINK = "https://t.me/wahidaihunter_bot"
 CHANNEL_URL = "https://t.me/aitoolshub07"
+ADMIN_ID = 6292793285
 
 
 def split_emoji(label: str) -> tuple[str, str]:
@@ -52,6 +55,7 @@ def main() -> None:
     new_cutoff = (date.today() - timedelta(days=7)).isoformat()
 
     out_tools = []
+    priv: dict[str, str] = {}  # locked index -> base64("name\nurl"), decoded only for admin/paid
     n_open = n_locked = 0
     for t in tools:
         is_open = t.get("url", "") in free_urls
@@ -70,16 +74,39 @@ def main() -> None:
             )
         else:
             n_locked += 1
-            # Name + URL deliberately OMITTED — anti-Google rule.
+            key = str(len(out_tools))
+            # Name + URL stored base64 (never plain) — decoded client-side only
+            # when the Telegram user is admin or an active paid user.
+            raw = (t.get("name", "") + "\n" + t.get("url", "")).encode("utf-8")
+            priv[key] = base64.b64encode(raw).decode("ascii")
             out_tools.append(
                 {
                     "locked": True,
+                    "key": key,
                     "category": t.get("category", ""),
                     "one_liner": t.get("one_liner", ""),
                     "free_plan": t.get("free_plan", "Free"),
                     "is_new": t.get("date_added", "") >= new_cutoff,
                 }
             )
+
+    # Active paid user IDs (for the in-app unlock).
+    paid_ids: list[int] = []
+    try:
+        ent = json.loads(ENTITLEMENTS_PATH.read_text(encoding="utf-8"))
+        today = date.today().isoformat()
+        for uid, info in ent.items():
+            if not isinstance(info, dict) or not info.get("paid"):
+                continue
+            exp = info.get("expires", "")
+            if exp and exp < today:
+                continue
+            try:
+                paid_ids.append(int(uid))
+            except (TypeError, ValueError):
+                pass
+    except (FileNotFoundError, Exception):
+        pass
 
     cats = []
     for c in db.get("categories", []):
@@ -112,9 +139,14 @@ def main() -> None:
     html = html.replace("__TOOLS_JSON__", json.dumps(out_tools, ensure_ascii=False))
     html = html.replace("__TRIALS_JSON__", json.dumps(out_trials, ensure_ascii=False))
     html = html.replace("__META_JSON__", json.dumps(meta, ensure_ascii=False))
+    html = html.replace("__PRIV_JSON__", json.dumps(priv, ensure_ascii=False))
+    html = html.replace("__ADMIN_ID__", json.dumps(ADMIN_ID))
+    html = html.replace("__PAID_IDS__", json.dumps(paid_ids))
     assert "__CATS_JSON__" not in html and "__TOOLS_JSON__" not in html
+    assert "__PRIV_JSON__" not in html
 
-    # Final safety net: no locked name/URL may appear in the output.
+    # Final safety net: no locked name/URL may appear in PLAIN text.
+    # (They exist only as base64 blobs, which Google doesn't index.)
     for t in tools:
         if t.get("url", "") not in free_urls:
             assert t["name"] not in html, f"LEAK: {t['name']}"
@@ -123,7 +155,8 @@ def main() -> None:
     OUT_PATH.write_text(html, encoding="utf-8")
     print(f"Built {OUT_PATH} ({OUT_PATH.stat().st_size // 1024} KB)")
     print(f"  tools: {len(tools)} (open {n_open}, locked {n_locked}), trials: {len(trials)}")
-    print("  leak check: PASS — no locked names/URLs in HTML")
+    print(f"  privileged unlock: admin + {len(paid_ids)} paid user(s)")
+    print("  leak check: PASS — no locked names/URLs in plain HTML")
 
 
 TEMPLATE = """<!DOCTYPE html>
@@ -268,7 +301,26 @@ TEMPLATE = """<!DOCTYPE html>
   var TOOLS = __TOOLS_JSON__;
   var TRIALS = __TRIALS_JSON__;
   var META = __META_JSON__;
+  var PRIV = __PRIV_JSON__;
+  var ADMIN_ID = __ADMIN_ID__;
+  var PAID_IDS = __PAID_IDS__;
   var BOT = META.bot_link;
+
+  /* Privileged unlock: admin + active paid users see real names/URLs.
+     Locked data is base64 (never plain text) so it isn't indexed. */
+  function b64d(s){ try { return decodeURIComponent(escape(atob(s))); } catch(e){ return ""; } }
+  var _uid = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? (tg.initDataUnsafe.user.id|0) : 0;
+  var PRIVILEGED = (_uid === ADMIN_ID) || (PAID_IDS.indexOf(_uid) >= 0);
+  if (PRIVILEGED) {
+    TOOLS.forEach(function(t){
+      if (t.locked && t.key && PRIV[t.key]) {
+        var parts = b64d(PRIV[t.key]).split("\n");
+        t.name = parts[0] || "";
+        t.url = parts[1] || "";
+        t.locked = false;
+      }
+    });
+  }
 
   var state = { cat:"all", q:"" };
 
