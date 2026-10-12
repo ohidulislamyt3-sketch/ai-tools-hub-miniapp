@@ -22,7 +22,8 @@ BASE = Path(__file__).resolve().parent
 YAML_PATH = BASE.parent / "data" / "tools.yaml"
 ENTITLEMENTS_PATH = BASE.parent / "data" / "entitlements.json"
 OUT_PATH = BASE / "index.html"
-FREE_SAMPLES_PER_CAT = 3
+FREE_SAMPLES_PER_CAT = 1
+FREE_TRIALS = 1
 BOT_DEEP_LINK = "https://t.me/wahidaihunter_bot"
 CHANNEL_URL = "https://t.me/aitoolshub07"
 ADMIN_ID = 6292793285
@@ -115,7 +116,19 @@ def main() -> None:
 
     out_trials = []
     for i, t in enumerate(trials):
-        # Showcase model: ALL trials blurred for free users (like tools).
+        # Showcase model: 1 trial free, rest blurred/locked for free users.
+        if i < FREE_TRIALS:
+            out_trials.append(
+                {
+                    "locked": False,
+                    "name": t.get("name", ""),
+                    "url": t.get("url", ""),
+                    "country": t.get("country", ""),
+                    "trial": t.get("trial", ""),
+                    "one_liner": t.get("one_liner", ""),
+                }
+            )
+            continue
         key = "r" + str(i)
         raw = (t.get("name", "") + "\n" + t.get("url", "")).encode("utf-8")
         priv[key] = base64.b64encode(raw).decode("ascii")
