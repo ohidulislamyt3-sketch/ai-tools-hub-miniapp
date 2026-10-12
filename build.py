@@ -321,7 +321,7 @@ TEMPLATE = """<!DOCTYPE html>
   var PRIVILEGED = (_uid === ADMIN_ID) || (PAID_IDS.indexOf(_uid) >= 0);
   function decodeLocked(t){
     if (t.locked && t.key && PRIV[t.key]) {
-      var parts = b64d(PRIV[t.key]).split("\n");
+      var parts = b64d(PRIV[t.key]).split("\\n");
       t.name = parts[0] || "";
       t.url = parts[1] || "";
       if (PRIVILEGED) t.locked = false;
