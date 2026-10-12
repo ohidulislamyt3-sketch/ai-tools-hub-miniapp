@@ -309,7 +309,8 @@ TEMPLATE = """<!DOCTYPE html>
   /* Privileged unlock: admin + active paid users see real names/URLs.
      Locked data is base64 (never plain text) so it isn't indexed. */
   function b64d(s){ try { return decodeURIComponent(escape(atob(s))); } catch(e){ return ""; } }
-  var _uid = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? (tg.initDataUnsafe.user.id|0) : 0;
+  var _u = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user.id : 0;
+  var _uid = (typeof _u === "number") ? _u : (parseInt(_u, 10) || 0);
   var PRIVILEGED = (_uid === ADMIN_ID) || (PAID_IDS.indexOf(_uid) >= 0);
   if (PRIVILEGED) {
     TOOLS.forEach(function(t){
