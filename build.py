@@ -115,22 +115,19 @@ def main() -> None:
 
     out_trials = []
     for i, t in enumerate(trials):
-        if i < FREE_SAMPLES_PER_CAT:
-            out_trials.append(
-                {
-                    "locked": False,
-                    "name": t.get("name", ""),
-                    "url": t.get("url", ""),
-                    "country": t.get("country", ""),
-                    "trial": t.get("trial", ""),
-                    "one_liner": t.get("one_liner", ""),
-                }
-            )
-        else:
-            key = "r" + str(i)
-            raw = (t.get("name", "") + "\n" + t.get("url", "")).encode("utf-8")
-            priv[key] = base64.b64encode(raw).decode("ascii")
-            out_trials.append({"locked": True, "key": key})
+        # Showcase model: ALL trials blurred for free users (like tools).
+        key = "r" + str(i)
+        raw = (t.get("name", "") + "\n" + t.get("url", "")).encode("utf-8")
+        priv[key] = base64.b64encode(raw).decode("ascii")
+        out_trials.append(
+            {
+                "locked": True,
+                "key": key,
+                "country": t.get("country", ""),
+                "trial": t.get("trial", ""),
+                "one_liner": t.get("one_liner", ""),
+            }
+        )
 
     meta = {
         "generated": date.today().isoformat(),
@@ -229,6 +226,7 @@ TEMPLATE = """<!DOCTYPE html>
   .card:active{transform:scale(.97)}
   .card.open:hover{border-color:rgba(0,201,167,.5)}
   .card.locked{border-style:dashed}
+  .blur-wrap{filter:blur(6px);pointer-events:none;user-select:none;-webkit-user-select:none}
   .card.locked::after{content:"";position:absolute;inset:0;pointer-events:none;
     background:linear-gradient(115deg,transparent 40%,rgba(245,185,66,.07) 50%,transparent 60%)}
   .badge-new{position:absolute;top:10px;right:10px;font-size:10px;font-weight:800;color:#04231c;
@@ -314,30 +312,23 @@ TEMPLATE = """<!DOCTYPE html>
   var PAID_IDS = __PAID_IDS__;
   var BOT = META.bot_link;
 
-  /* Privileged unlock: admin + active paid users see real names/URLs.
-     Locked data is base64 (never plain text) so it isn't indexed. */
+  /* Showcase model: everyone SEES everything; free users see it BLURRED
+     (no clicks), admin/paid see it clear. Locked data is base64 in the page
+     (never plain text) so it isn't indexed. */
   function b64d(s){ try { return decodeURIComponent(escape(atob(s))); } catch(e){ return ""; } }
   var _u = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user.id : 0;
   var _uid = (typeof _u === "number") ? _u : (parseInt(_u, 10) || 0);
   var PRIVILEGED = (_uid === ADMIN_ID) || (PAID_IDS.indexOf(_uid) >= 0);
-  if (PRIVILEGED) {
-    TOOLS.forEach(function(t){
-      if (t.locked && t.key && PRIV[t.key]) {
-        var parts = b64d(PRIV[t.key]).split("\n");
-        t.name = parts[0] || "";
-        t.url = parts[1] || "";
-        t.locked = false;
-      }
-    });
-    TRIALS.forEach(function(t){
-      if (t.locked && t.key && PRIV[t.key]) {
-        var p2 = b64d(PRIV[t.key]).split("\n");
-        t.name = p2[0] || "";
-        t.url = p2[1] || "";
-        t.locked = false;
-      }
-    });
+  function decodeLocked(t){
+    if (t.locked && t.key && PRIV[t.key]) {
+      var parts = b64d(PRIV[t.key]).split("\n");
+      t.name = parts[0] || "";
+      t.url = parts[1] || "";
+      if (PRIVILEGED) t.locked = false;
+    }
   }
+  TOOLS.forEach(decodeLocked);
+  TRIALS.forEach(decodeLocked);
 
   var state = { cat:"all", q:"" };
 
@@ -380,10 +371,14 @@ TEMPLATE = """<!DOCTYPE html>
   function toolCard(t){
     var badge = t.is_new ? '<span class="badge-new">NEW</span>' : "";
     if (t.locked) {
+      /* Showcase: real content visible but blurred, not clickable. */
       return '<div class="card locked">'+badge+
-        '<div class="lock-big">🔒</div>'+
-        '<div class="cname">Premium Tool</div>'+
-        '<div class="cicon" style="font-size:13px">'+esc(catEmoji(t.category))+'</div>'+
+        '<div class="blur-wrap">'+
+        '<div class="cicon">'+esc(catEmoji(t.category))+'</div>'+
+        '<div class="cname">'+esc(t.name)+'</div>'+
+        '<div class="cline">'+esc(t.one_liner)+'</div>'+
+        '<div class="cplan">🆓 '+esc(t.free_plan)+'</div>'+
+        '</div>'+
         lockBtn()+'</div>';
     }
     return '<div class="card open">'+badge+
@@ -413,9 +408,12 @@ TEMPLATE = """<!DOCTYPE html>
     document.getElementById("tgrid").innerHTML = TRIALS.map(function(t){
       if (t.locked) {
         return '<div class="card locked trial">'+
-          '<div class="lock-big">🔒</div>'+
-          '<div class="cname">Premium Offer</div>'+
-          '<div class="cicon" style="font-size:13px">🎁</div>'+
+          '<div class="blur-wrap">'+
+          '<div class="cicon">🎁</div>'+
+          '<div class="cname">'+esc(t.name)+'</div>'+
+          '<div class="tmeta">🌍 '+esc(t.country)+' · <b>'+esc(t.trial)+'</b></div>'+
+          '<div class="cline">'+esc(t.one_liner)+'</div>'+
+          '</div>'+
           lockBtn()+'</div>';
       }
       return '<div class="card open trial">'+
