@@ -353,7 +353,7 @@ TEMPLATE = """<!DOCTYPE html>
 
   /* stats */
   document.getElementById("stats").innerHTML =
-    '<span class="stat">✅ 100+ verified tools</span>' +
+    '<span class="stat">✅ 1000+ verified tools</span>' +
     '<span class="stat">🎁 '+TRIALS.length+' trial offers</span>' +
     '<span class="stat">🆕 new daily</span>';
 
